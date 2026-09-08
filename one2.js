@@ -74,6 +74,7 @@
     }catch(e){}
     return '';
   }
+  window.__alcopacGetUID = getUID;
 
   function ensureUID(){
     var u=getUID();
@@ -88,6 +89,7 @@
     try{localStorage.setItem('lampac_uid_backup', u);}catch(e){}
     return u;
   }
+  window.__alcopacEnsureUID = ensureUID;
 
   function getCub(){
     try{
@@ -504,9 +506,16 @@
           };
         }
 
-        // Фиксация постоянного UID
-        var unic_id = getUID() || ensureUID();
+        // Фиксация постоянного UID (через экспорт из первой части)
+        var unic_id = (window.__alcopacGetUID ? window.__alcopacGetUID() : '') || (window.__alcopacEnsureUID ? window.__alcopacEnsureUID() : '');
+        if (!unic_id) {
+          unic_id = Lampa.Storage.get('lampac_unic_id', '');
+          if (!unic_id) {
+            unic_id = Lampa.Utils.uid(8).toLowerCase();
+          }
+        }
         Lampa.Storage.set('lampac_unic_id', unic_id);
+        try { localStorage.setItem('lampac_unic_id', JSON.stringify(unic_id)); } catch(e){}
         try { localStorage.setItem('lampac_uid_backup', unic_id); } catch(e){}
 
         // Синхронизация сохраненного токена
