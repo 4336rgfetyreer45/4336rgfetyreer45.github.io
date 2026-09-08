@@ -6,7 +6,7 @@
   var _lo=window.location.origin||'';
   var origin=(_lo&&_lo!=='null'&&_lo.indexOf('http')===0&&_lo.indexOf('127.0.0.1')<0&&_lo.indexOf('localhost')<0)?_lo:_srvHost;
 
-  // --- Helpers ---
+  // --- Функции авторизации (оставлены без изменений) ---
   function getToken(){
     try{
       var ca=document.cookie.match(/(?:^|;\s*)alpac_token=([^;]*)/);
@@ -172,6 +172,9 @@
     attempt();
   }
 
+  // Отключаем серверную подмену бандла, чтобы наши изменения сохранились
+  function upgradeBundle(tok){}
+
   function checkToken(tok){
     var cub=getCub();
     var uid=ensureUID();
@@ -289,105 +292,6 @@
 (function () {
   'use strict';
 
-  var ALLOHA_HOST = 'https://ab2024.ru';
-
-  // --- Перехватчик для интеграции Alloha из cinema.js в Alpac v0.5 ---
-  function patchBalancersData(data, reqUrl) {
-    if (!data) return data;
-    var list = data.online || (Array.isArray(data) ? data : null);
-    if (list && Array.isArray(list)) {
-      var allohaFound = false;
-      for (var i = 0; i < list.length; i++) {
-        var item = list[i];
-        var name = (item.name || item.title || '').toLowerCase();
-        if (name.indexOf('alloha') !== -1) {
-          allohaFound = true;
-          item.show = true;
-          if (item.url) {
-            item.url = item.url.replace(/https?:\/\/[^\/]+/i, ALLOHA_HOST);
-          }
-        }
-      }
-      if (!allohaFound) {
-        var qIdx = reqUrl.indexOf('?');
-        var qs = qIdx !== -1 ? reqUrl.substring(qIdx) : '';
-        list.unshift({
-          name: 'Alloha',
-          url: ALLOHA_HOST + '/lite/alloha' + qs,
-          show: true
-        });
-      }
-    }
-    return data;
-  }
-
-  // 1. Глобальный хук сетевых запросов XHR
-  var origXOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
-    if (typeof url === 'string') {
-      if (url.indexOf('alloha') !== -1) {
-        url = url.replace(/https?:\/\/beta\.l-vid\.online/i, ALLOHA_HOST);
-        if (url.indexOf('//') === -1 && url.indexOf('/') === 0) {
-          url = ALLOHA_HOST + url;
-        }
-      }
-    }
-    this._reqUrl = url;
-    return origXOpen.call(this, method, url, async, user, pass);
-  };
-
-  var origXSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.send = function(body) {
-    var self = this;
-    var url = this._reqUrl || '';
-    if (url.indexOf('withsearch') !== -1 || url.indexOf('events') !== -1) {
-      self.addEventListener('readystatechange', function() {
-        if (self.readyState === 4 && self.status === 200) {
-          try {
-            var parsed = JSON.parse(self.responseText);
-            var patched = patchBalancersData(parsed, url);
-            var str = JSON.stringify(patched);
-            Object.defineProperty(self, 'responseText', { value: str, configurable: true });
-            Object.defineProperty(self, 'response', { value: str, configurable: true });
-          } catch(e) {}
-        }
-      });
-    }
-    return origXSend.call(this, body);
-  };
-
-  // 2. Хук для внутреннего менеджера Lampa.Reguest
-  var hookTimer = setInterval(function() {
-    if (typeof Lampa !== 'undefined' && Lampa.Reguest) {
-      clearInterval(hookTimer);
-      var origSilent = Lampa.Reguest.prototype.silent;
-      var origNative = Lampa.Reguest.prototype.native;
-
-      Lampa.Reguest.prototype.silent = function(url, success, error, post, options) {
-        if (typeof url === 'string' && url.indexOf('alloha') !== -1) {
-          url = url.replace(/https?:\/\/beta\.l-vid\.online/i, ALLOHA_HOST);
-        }
-        var wrappedSuccess = function(res) {
-          var patched = patchBalancersData(res, url || '');
-          if (success) success(patched);
-        };
-        return origSilent.call(this, url, wrappedSuccess, error, post, options);
-      };
-
-      Lampa.Reguest.prototype.native = function(url, success, error, post, options) {
-        if (typeof url === 'string' && url.indexOf('alloha') !== -1) {
-          url = url.replace(/https?:\/\/beta\.l-vid\.online/i, ALLOHA_HOST);
-        }
-        var wrappedSuccess = function(res) {
-          var patched = patchBalancersData(res, url || '');
-          if (success) success(patched);
-        };
-        return origNative.call(this, url, wrappedSuccess, error, post, options);
-      };
-    }
-  }, 50);
-
-  // --- Загрузка оригинального бандла Alpac v0.5 ---
   var FULL = true;
   var SELF_UPGRADE = false;
 
@@ -417,9 +321,10 @@
     window.alcopac_upgrade = function (tok) {};
   }
 
-  // Оставляем родной online.js (Alpac v0.5)
+  // ЗАГРУЖАЕМ СРАЗУ ДВА ПЛАГИНА (Alpac + Cinema)
   var LIST = [
-    {"k":"online","o":0,"u":"https://beta.l-vid.online/online.js"},
+    {"k":"online","o":0,"u":"https://beta.l-vid.online/online.js"},      // Основа: Alpac v0.5
+    {"k":"cinema","o":0,"u":"https://bylampa.github.io/cinema.js"},      // Дополнение: Источник Alloha
     {"k":"catalog","o":1,"u":"https://beta.l-vid.online/catalog.js"},
     {"k":"account","o":0,"u":"https://beta.l-vid.online/account.js"},
     {"k":"server_widget","o":1,"u":"https://beta.l-vid.online/server_widget.js"}
